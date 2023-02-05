@@ -162,90 +162,182 @@ export async function createDID(
  * @returns Returns DID and transaction hash.
  */
 export async function registerDID(
-    did: string,
-    privateKey: string,
-    url?: string,
-    contractAddress?: string,
-    serviceEndpoint?: string
+      did: string,
+      privateKey: string,
+      url?: string,
+      contractAddress?: string,
+      serviceEndpoint?: string
+  ): Promise<BaseResponse> {
+      try {
+          let errorMessage: string;
+          let didDoc: object;
+          const didUriValidation: DidUriValidation = new DidUriValidation();
+          const registryContractInitialization: RegistryContractInitialization =
+              new RegistryContractInitialization();
+  
+          const didMethodCheck: Boolean = await didUriValidation.fvmDidMatch(did);
+          const didWithTestnet: string = await didUriValidation.splitfvmDid(did);
+  
+          if (didMethodCheck) {
+              const kp: any = await createKeyPair(privateKey);
+  
+              const networkCheckWithUrl: any = await didUriValidation.networkMatch(
+                  did,
+                  url,
+                  contractAddress
+              );
+  
+              if (
+                  (did &&
+                      didWithTestnet === 'testnet' &&
+                      did.split(':')[3] === kp.address) ||
+                  (did && didWithTestnet === kp.address)
+              ) {
+                  const registry: ethers.Contract =
+                      await registryContractInitialization.instanceCreation(
+                          privateKey,
+                          networkCheckWithUrl.url,
+                          networkCheckWithUrl.contractAddress
+                      );
+                  const didAddress: string =
+                      didWithTestnet === 'testnet'
+                          ? did.split(':')[3]
+                          : didWithTestnet;
+  
+                  let resolveDidDoc: any = await registry.functions
+                      .getDIDDoc(didAddress)
+                      .then((resValue: any) => {
+                          return resValue;
+                      });
+                  if (resolveDidDoc.includes('')) {
+                      // Get DID document
+                      if (serviceEndpoint) {
+                          didDoc = await wrapDidDocument(
+                              did,
+                              kp.publicKeyBase58,
+                              serviceEndpoint
+                          );
+                      } else {
+                          didDoc = await wrapDidDocument(did, kp.publicKeyBase58);
+                      }
+  
+                      const stringDidDoc: string = JSON.stringify(didDoc);
+  
+                      const txnHash: any = await registry.functions
+                          .createDID(didAddress, stringDidDoc)
+                          .then((resValue: any) => {
+                              return resValue;
+                          });
+  
+                      return BaseResponse.from(
+                          { did, txnHash },
+                          'Registered DID document successfully.'
+                      );
+                  } else {
+                      errorMessage = `The DID document already registered!`;
+                      throw new Error(errorMessage);
+                  }
+              } else {
+                  errorMessage = `Private key and DID uri do not match!`;
+                  throw new Error(errorMessage);
+              }
+          } else {
+              errorMessage = `DID does not match!`;
+              throw new Error(errorMessage);
+          }
+      } catch (error) {
+          throw error;
+      }
+  }
+
+
+
+
+/**
+ * Registers DID document on fvm chain.
+ * @param did
+ * @param signer
+ * @param url
+ * @param contractAddress
+ * @returns Returns DID and transaction hash.
+ */
+export async function registerDIDSigner(
+      did: string,
+      signer: ethers.Signer,
+      url?: string,
+      contractAddress?: string, 
+      serviceEndpoint?: string
 ): Promise<BaseResponse> {
-    try {
-        let errorMessage: string;
-        let didDoc: object;
-        const didUriValidation: DidUriValidation = new DidUriValidation();
-        const registryContractInitialization: RegistryContractInitialization =
-            new RegistryContractInitialization();
+      try {
+            let errorMessage: string;
+            let didDoc: object;
+            const didUriValidation: DidUriValidation = new DidUriValidation();
+            const registryContractInitialization: RegistryContractInitialization = new RegistryContractInitialization();
 
-        const didMethodCheck: Boolean = await didUriValidation.fvmDidMatch(did);
-        const didWithTestnet: string = await didUriValidation.splitfvmDid(did);
+            const didMethodCheck: Boolean = await didUriValidation.fvmDidMatch(did);
+            const didWithTestnet: string = await didUriValidation.splitfvmDid(did);
 
-        if (didMethodCheck) {
-            const kp: any = await createKeyPair(privateKey);
+            if (didMethodCheck) {
+                  const address: any = await signer.getAddress();
 
-            const networkCheckWithUrl: any = await didUriValidation.networkMatch(
-                did,
-                url,
-                contractAddress
-            );
+                  const networkCheckWithUrl: any = await didUriValidation.networkMatch(
+                        did,
+                        url,
+                        contractAddress
+                  );
 
-            if (
-                (did &&
-                    didWithTestnet === 'testnet' &&
-                    did.split(':')[3] === kp.address) ||
-                (did && didWithTestnet === kp.address)
-            ) {
-                const registry: ethers.Contract =
-                    await registryContractInitialization.instanceCreation(
-                        privateKey,
-                        networkCheckWithUrl.url,
-                        networkCheckWithUrl.contractAddress
-                    );
-                const didAddress: string =
-                    didWithTestnet === 'testnet'
-                        ? did.split(':')[3]
-                        : didWithTestnet;
-
-                let resolveDidDoc: any = await registry.functions
-                    .getDIDDoc(didAddress)
-                    .then((resValue: any) => {
-                        return resValue;
-                    });
-                if (resolveDidDoc.includes('')) {
-                    // Get DID document
-                    if (serviceEndpoint) {
-                        didDoc = await wrapDidDocument(
-                            did,
-                            kp.publicKeyBase58,
-                            serviceEndpoint
+                  if (
+                        (did &&
+                              didWithTestnet === "testnet" &&
+                              did.split(":")[3] === address) ||
+                        (did && didWithTestnet === address)
+                  ) {
+                        const registry: ethers.Contract = await registryContractInitialization.instanceCreationSigner(
+                              signer,
+                              networkCheckWithUrl.url,
+                              networkCheckWithUrl.contractAddress
                         );
-                    } else {
-                        didDoc = await wrapDidDocument(did, kp.publicKeyBase58);
-                    }
+                        const didAddress: string =
+                              didWithTestnet === "testnet" ? did.split(":")[3] : didWithTestnet;
 
-                    const stringDidDoc: string = JSON.stringify(didDoc);
+                        let resolveDidDoc: any = await registry.functions
+                              .getDIDDoc(didAddress)
+                              .then((resValue: any) => {
+                                    return resValue;
+                              });
+                        if (resolveDidDoc.includes("")) {
+                              // Get DID document
+                              if(serviceEndpoint){
+                                     didDoc = await wrapDidDocument(did, address, serviceEndpoint);  
+                              } else{
+                                     didDoc = await wrapDidDocument(did, address);
+                              }
+                              
+                              const stringDidDoc: string = JSON.stringify(didDoc);
 
-                    const txnHash: any = await registry.functions
-                        .createDID(didAddress, stringDidDoc)
-                        .then((resValue: any) => {
-                            return resValue;
-                        });
+                              const txnHash: any = await registry.functions
+                                    .createDID( didAddress, stringDidDoc )
+                                    .then((resValue: any) => {
+                                          return resValue;
+                                    });
 
-                    return BaseResponse.from(
-                        { did, txnHash },
-                        'Registered DID document successfully.'
-                    );
-                } else {
-                    errorMessage = `The DID document already registered!`;
-                    throw new Error(errorMessage);
-                }
+                              return BaseResponse.from(
+                                    { did, txnHash },
+                                    "Registered DID document successfully."
+                              );
+                        } else {
+                              errorMessage = `The DID document already registered!`;
+                              throw new Error(errorMessage);
+                        }
+                  } else {
+                        errorMessage = `Private key and DID uri do not match!`;
+                        throw new Error(errorMessage);
+                  }
             } else {
-                errorMessage = `Private key and DID uri do not match!`;
-                throw new Error(errorMessage);
+                  errorMessage = `DID does not match!`;
+                  throw new Error(errorMessage);
             }
-        } else {
-            errorMessage = `DID does not match!`;
-            throw new Error(errorMessage);
-        }
-    } catch (error) {
-        throw error;
-    }
+      } catch (error) {
+            throw error;
+      }
 }
