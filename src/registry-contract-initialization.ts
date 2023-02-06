@@ -42,7 +42,6 @@ export class RegistryContractInitialization {
                   const provider: ethers.providers.JsonRpcProvider = new ethers.providers.JsonRpcProvider(
                         url
                   );
-                  signer.connect( provider );
                   const registry: ethers.Contract = new ethers.Contract(
                         contractAddress,
                         DidRegistryContract.abi,
